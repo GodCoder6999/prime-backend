@@ -4,24 +4,29 @@ import { makeProviders, makeStandardFetcher, targets } from '@movie-web/provider
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const app = express();
-// FIXED: Double pipe || for the port
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 
+// 1. Home Route to verify the server is awake
+app.get('/', (req, res) => {
+  res.send('Prime Backend is Live 🚀');
+});
+
+// 2. Initialize Scraper
 const providers = makeProviders({
   fetcher: makeStandardFetcher(fetch),
-  target: targets.NATIVE, // NATIVE often works better than ANY for Node.js environments
-  // This tells the engine to keep trying even if some sources fail
-  consistent: true 
+  target: targets.NATIVE,
 });
+
+// 3. The Stream Endpoint
 app.get('/api/stream', async (req, res) => {
   const { tmdbId, type, title, releaseYear, season, episode } = req.query;
 
   try {
     const media = {
-      type: type, 
+      type: type === 'show' ? 'show' : 'movie', 
       title: title,
       releaseYear: Number(releaseYear),
       tmdbId: tmdbId,
@@ -31,28 +36,35 @@ app.get('/api/stream', async (req, res) => {
       })
     };
 
-    const output = await providers.runAll({ 
-  media,
-  sourceId: null, // Let it search all sources
+    const output = await providers.runAll({ media });
+
+    if (!output) {
+      return res.status(404).json({ error: "No stream found." });
+    }
+
+    res.json(output);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// FIXED: Cleaner proxy logic
+// 4. The CORS Proxy
 app.use('/proxy', createProxyMiddleware({
-  target: 'http://localhost:3000', // Dummy target
+  target: 'http://localhost:3000',
   router: (req) => {
     try {
-        const url = new URL(req.query.url);
-        return url.origin;
+      const url = new URL(req.query.url);
+      return url.origin;
     } catch (e) {
-        return '';
+      return '';
     }
   },
   pathRewrite: (path, req) => {
     try {
-        const url = new URL(req.query.url);
-        return url.pathname + url.search;
+      const url = new URL(req.query.url);
+      return url.pathname + url.search;
     } catch (e) {
-        return path;
+      return path;
     }
   },
   changeOrigin: true,
