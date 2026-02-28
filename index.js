@@ -12,9 +12,10 @@ app.use(express.json());
 
 const providers = makeProviders({
   fetcher: makeStandardFetcher(fetch),
-  target: targets.ANY,
+  target: targets.NATIVE, // NATIVE often works better than ANY for Node.js environments
+  // This tells the engine to keep trying even if some sources fail
+  consistent: true 
 });
-
 app.get('/api/stream', async (req, res) => {
   const { tmdbId, type, title, releaseYear, season, episode } = req.query;
 
@@ -30,16 +31,9 @@ app.get('/api/stream', async (req, res) => {
       })
     };
 
-    const output = await providers.runAll({ media });
-
-    if (!output) {
-        return res.status(404).json({ error: "No stream found." });
-    }
-
-    res.json(output);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    const output = await providers.runAll({ 
+  media,
+  sourceId: null, // Let it search all sources
 });
 
 // FIXED: Cleaner proxy logic
